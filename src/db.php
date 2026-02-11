@@ -152,7 +152,11 @@ HTML
                 wp_die('Database is not initialized.', 'Database Error');
             }
             foreach ($this->functions as $f => $t) {
-                $pdo->sqliteCreateFunction($f, [$this, $t]);
+                if (PHP_VERSION_ID >= 80400) {
+                    $pdo->createFunction($f, [$this, $t]);
+                } else {
+                    $pdo->sqliteCreateFunction($f, [$this, $t]);
+                }
             }
         }
 
@@ -1163,7 +1167,11 @@ HTML
                 $status = 0;
                 do {
                     try {
-                        $this->pdo = new PDO($dsn, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                        if (PHP_VERSION_ID >= 80400) {
+                            $this->pdo = new \Pdo\Sqlite($dsn, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+                        } else {
+                            $this->pdo = new PDO($dsn, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                        }
                         new PDOSQLiteUDFS($this->pdo);
                         $GLOBALS['@pdo'] = $this->pdo;
                     } catch (PDOException $ex) {
