@@ -40,7 +40,8 @@ jobs:
           # Bust the cache at least once a month - output format: YYYY-MM.
           custom-cache-suffix: $(date -u "+%Y-%m")
 
-      - id: versions
+      - name: Capture package versions for conditional alignment
+        id: versions
         run: |
           echo "wordpress=$(composer show roots/wordpress --format=json | jq -r '.versions[0]')" >> $GITHUB_OUTPUT
           echo "wp-phpunit=$(composer show wp-phpunit/wp-phpunit --format=json | jq -r '.versions[0]')" >> $GITHUB_OUTPUT
