@@ -22,7 +22,7 @@ jobs:
     name: Unit tests on PHP ${{ matrix.php-version }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -35,10 +35,19 @@ jobs:
         run: php -l src/db.php
 
       - name: Install Composer dependencies
-        uses: ramsey/composer-install@v2
+        uses: ramsey/composer-install@v4
         with:
           # Bust the cache at least once a month - output format: YYYY-MM.
           custom-cache-suffix: $(date -u "+%Y-%m")
+
+      - id: versions
+        run: |
+          echo "wordpress=$(composer show roots/wordpress --format=json | jq -r '.versions[0]')" >> $GITHUB_OUTPUT
+          echo "wp-phpunit=$(composer show wp-phpunit/wp-phpunit --format=json | jq -r '.versions[0]')" >> $GITHUB_OUTPUT
+
+      - name: Align wp-phpunit version with WordPress
+        if: ${{ steps.versions.outputs.wordpress != steps.versions.outputs.wp-phpunit }}
+        run: composer require --dev wp-phpunit/wp-phpunit ${{ steps.versions.outputs.wordpress }}
 
       - name: Run tests
         run: composer test
