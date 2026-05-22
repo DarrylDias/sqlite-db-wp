@@ -30,7 +30,8 @@
         "roots/wordpress": "^6",
         "wp-cli/core-command": "^2",
         "wp-phpunit/wp-phpunit": "^6",
-        "yoast/phpunit-polyfills": "^1"
+        "yoast/phpunit-polyfills": "^1",
+        "squizlabs/php_codesniffer": "^4.0"
     },
     "scripts": {
         "test": "phpunit"

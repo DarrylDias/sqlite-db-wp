@@ -1403,6 +1403,7 @@ HTML
                     }
                     $this->queries[] = "Rewritten:\n$this->rewritten_query";
                     $this->extract_variables();
+                    $this->add_like_escape();
                     $prepared_query = $this->prepare_query();
                     $this->execute_query($prepared_query);
                     if (! $this->is_error) {
@@ -1766,6 +1767,36 @@ HTML
         }
 
         /**
+         * Method to add ESCAPE '\' to LIKE clauses after variable extraction.
+         *
+         * SQLite does not have a default escape character in LIKE clauses,
+         * unlike MySQL which treats backslash as the default escape character.
+         * This must run after extract_variables() to avoid the ESCAPE value
+         * being replaced with a placeholder.
+         */
+        private function add_like_escape()
+        {
+            $this->prepared_query = preg_replace_callback(
+                '/\bLIKE\s+('
+                . "(?::param_\d+)"               // PDO placeholder
+                . '|'
+                . "(?:'[^']*(?:''[^']*)*'?'?)"  // single-quoted string
+                . '|'
+                . '(?:[^\s,;()]+)'               // unquoted token
+                . ')'
+                . '(\s+(?:AND|OR|ORDER|GROUP|HAVING|LIMIT|FOR|UNION|\)|;|$))'
+                . '/is',
+                function ($matches) {
+                    if (preg_match('/\bESCAPE\s+/i', $matches[0])) {
+                        return $matches[0];
+                    }
+                    return 'LIKE ' . $matches[1] . " ESCAPE '\\'" . $matches[2];
+                },
+                $this->prepared_query
+            );
+        }
+
+        /**
          * Method to extract field data to an array and prepare the query statement.
          *
          * If original SQL statement is CREATE query, this function does nothing.
@@ -1817,8 +1848,9 @@ HTML
          */
         private function replace_variables_with_placeholders($matches)
         {
-            //remove the wordpress escaping mechanism
-            $param = stripslashes($matches[0]);
+            // SQLite does not use backslash escaping in strings,
+            // so stripslashes is not needed here.
+            $param = $matches[0];
 
             //remove trailing spaces
             $param = trim($param);
@@ -2572,6 +2604,8 @@ HTML
          * Method to escape characters.
          *
          * This overrides wpdb::_real_escape() to avoid using mysql_real_escape_string().
+         * Uses SQLite-compatible escaping where only the single quote needs to be escaped
+         * (by doubling it), as backslash has no special meaning in SQLite string literals.
          *
          * @see wpdb::_real_escape()
          *
@@ -2581,25 +2615,23 @@ HTML
          */
         function _real_escape($string)
         {
-            return addslashes($string);
+            return str_replace("'", "''", $string);
         }
 
         /**
-         * Method to dummy out wpdb::esc_like() function.
+         * Method to escape LIKE wildcards in a string.
          *
-         * WordPress 4.0.0 introduced esc_like() function that adds backslashes to %,
-         * underscore and backslash, which is not interpreted as escape character
-         * by SQLite. So we override it and dummy out this function.
+         * Escapes % and _ with backslash so they are treated as literals in SQL LIKE clauses.
+         * The backslash escape character itself is also escaped.
+         * SQLite requires the LIKE clause to include ESCAPE '\' for backslash escaping to work.
          *
-         * @param string $text The raw text to be escaped. The input typed by the user should have no
-         *                     extra or deleted slashes.
+         * @param string $text The raw text to be escaped.
          *
-         * @return string Text in the form of a LIKE phrase. The output is not SQL safe. Call $wpdb::prepare()
-         *                or real_escape next.
+         * @return string Text with LIKE wildcards escaped.
          */
         public function esc_like($text)
         {
-            return $text;
+            return addcslashes($text, '\%_');
         }
 
         /**
@@ -2907,7 +2939,6 @@ HTML
          * @var boolean
          */
         private $orderby_field = false;
-
         /**
          * Method to rewrite a query string for SQLite to execute.
          *
@@ -3570,6 +3601,37 @@ HTML
                 }
                 $this->num_of_rewrite_between--;
             } while ($this->num_of_rewrite_between > 0);
+        }
+
+        /**
+         * Method to add ESCAPE '\' to LIKE clauses.
+         *
+         * SQLite does not have a default escape character in LIKE clauses,
+         * unlike MySQL which treats backslash as the default escape character.
+         * This method appends ESCAPE '\' to every LIKE clause that does not
+         * already have an explicit ESCAPE clause.
+         *
+         * @access private
+         */
+        private function rewrite_like_escape()
+        {
+            $this->_query = preg_replace_callback(
+                '/\bLIKE\s+('
+                . "(?:'[^']*(?:''[^']*)*'?'?)"  // single-quoted string
+                . '|'
+                . '(?:[^\s,;()]+)'               // unquoted token
+                . ')'
+                . '(\s+(?:AND|OR|ORDER|GROUP|HAVING|LIMIT|FOR|UNION|\)|;|$))'
+                . '/is',
+                function ($matches) {
+                    // Check if ESCAPE clause already exists
+                    if (preg_match('/\bESCAPE\s+/i', $matches[0])) {
+                        return $matches[0];
+                    }
+                    return 'LIKE ' . $matches[1] . " ESCAPE '\\'" . $matches[2];
+                },
+                $this->_query
+            );
         }
 
         /**
