@@ -3069,13 +3069,19 @@ HTML
         private function handle_show_query()
         {
             $this->_query = str_ireplace(' FULL', '', $this->_query);
-            $table_name = '';
+            $like_value = '';
             $pattern = '/^\\s*SHOW\\s*TABLES\\s*.*?(LIKE\\s*(.*))$/im';
             if (preg_match($pattern, $this->_query, $matches)) {
-                $table_name = str_replace(["'", ';'], '', $matches[2]);
+                $raw = trim($matches[2]);
+                // Remove surrounding quotes if present
+                if ((strpos($raw, "'") === 0 && substr($raw, -1) === "'")
+                    || (strpos($raw, '"') === 0 && substr($raw, -1) === '"')) {
+                    $raw = substr($raw, 1, -1);
+                }
+                $like_value = str_replace("'", "''", $raw);
             }
-            if (! empty($table_name)) {
-                $suffix = ' AND name LIKE ' . "'" . $table_name . "'";
+            if ($like_value !== '') {
+                $suffix = " AND name LIKE '{$like_value}'";
             } else {
                 $suffix = '';
             }
@@ -3379,13 +3385,15 @@ HTML
             $pattern_like = '/^\\s*SHOW\\s*(COLUMNS|FIELDS)\\s*FROM\\s*(.*)?\\s*LIKE\\s*(.*)?/i';
             $pattern = '/^\\s*SHOW\\s*(COLUMNS|FIELDS)\\s*FROM\\s*(.*)?/i';
             if (preg_match($pattern_like, $this->_query, $matches)) {
-                $table_name = str_replace("'", "", trim($matches[2]));
-                $column_name = str_replace("'", "", trim($matches[3]));
-                $query_string = "SELECT sql FROM sqlite_master WHERE tbl_name='$table_name' AND sql LIKE '%$column_name%'";
-                $this->_query = $query_string;
+                $table_name = str_replace("'", "''", trim($matches[2]));
+                $table_name = preg_replace('/[^\w\s]/', '', $table_name);
+                $column_name = str_replace("'", "''", trim($matches[3]));
+                $column_name = preg_replace('/[^\w\s%_]/', '', $column_name);
+                $this->_query = "SELECT * FROM pragma_table_info('{$table_name}') WHERE name LIKE '{$column_name}'";
             } elseif (preg_match($pattern, $this->_query, $matches)) {
-                $table_name = $matches[2];
-                $query_string = preg_replace($pattern, "PRAGMA table_info($table_name)", $this->_query);
+                $table_name = trim($matches[2]);
+                $table_name = preg_replace('/[^\w\s]/', '', $table_name);
+                $query_string = preg_replace($pattern, "PRAGMA table_info({$table_name})", $this->_query);
                 $this->_query = $query_string;
             }
         }
@@ -3401,9 +3409,9 @@ HTML
         {
             $pattern = '/^\\s*SHOW\\s*(?:INDEX|INDEXES|KEYS)\\s*FROM\\s*(\\w+)?/im';
             if (preg_match($pattern, $this->_query, $match)) {
-                $table_name = preg_replace("/[\';]/", '', $match[1]);
-                $table_name = trim($table_name);
-                $this->_query = "SELECT * FROM sqlite_master WHERE tbl_name='$table_name'";
+                $table_name = trim($match[1]);
+                $table_name = str_replace("'", "''", $table_name);
+                $this->_query = "SELECT * FROM sqlite_master WHERE tbl_name='{$table_name}'";
             }
         }
 
