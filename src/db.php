@@ -53,6 +53,8 @@ namespace WP_SQLite_DB {
         } else {
             $admin_dir = 'wp-admin/';
         }
+        $message = htmlspecialchars($message, ENT_QUOTES);
+        $data = $data !== null ? htmlspecialchars($data, ENT_QUOTES) : null;
         die(<<<HTML
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -1554,11 +1556,14 @@ HTML
             }
             $output .= "<div class=\"queries\" style=\"clear:both; margin_bottom:2px; border: red dotted thin;\">Queries made or created this session were<br/>\r\n\t<ol>\r\n";
             foreach ($this->queries as $q) {
-                $output .= "\t\t<li>" . $q . "</li>\r\n";
+                $output .= "\t\t<li>" . htmlspecialchars($q, ENT_QUOTES) . "</li>\r\n";
             }
             $output .= "\t</ol>\r\n</div>";
             foreach ($this->error_messages as $num => $m) {
-                $output .= "<div style=\"clear:both; margin_bottom:2px; border: red dotted thin;\" class=\"error_message\" style=\"border-bottom:dotted blue thin;\">Error occurred at line {$this->errors[$num]['line']} in Function {$this->errors[$num]['function']}. <br/> Error message was: $m </div>";
+                $escaped_m = htmlspecialchars($m, ENT_QUOTES);
+                $escaped_line = htmlspecialchars($this->errors[$num]['line'], ENT_QUOTES);
+                $escaped_function = htmlspecialchars($this->errors[$num]['function'], ENT_QUOTES);
+                $output .= "<div style=\"clear:both; margin_bottom:2px; border: red dotted thin;\" class=\"error_message\" style=\"border-bottom:dotted blue thin;\">Error occurred at line {$escaped_line} in Function {$escaped_function}. <br/> Error message was: {$escaped_m} </div>";
             }
 
             ob_start();
@@ -2660,7 +2665,10 @@ HTML
                     $str = '';
                 }
             }
-            $EZSQL_ERROR[] = ['query' => $this->last_query, 'error_str' => $str];
+            $EZSQL_ERROR[] = [
+                'query' => htmlspecialchars($this->last_query, ENT_QUOTES),
+                'error_str' => htmlspecialchars($str, ENT_QUOTES),
+            ];
 
             if ($this->suppress_errors) {
                 return false;
@@ -2669,10 +2677,14 @@ HTML
             wp_load_translations_early();
 
             if ($caller = $this->get_caller()) {
-                $error_str = sprintf(__('WordPress database error %1$s for query %2$s made by %3$s'), $str,
-                    $this->last_query, $caller);
+                $error_str = sprintf(__('WordPress database error %1$s for query %2$s made by %3$s'),
+                    htmlspecialchars($str, ENT_QUOTES),
+                    htmlspecialchars($this->last_query, ENT_QUOTES),
+                    htmlspecialchars($caller, ENT_QUOTES));
             } else {
-                $error_str = sprintf(__('WordPress database error %1$s for query %2$s'), $str, $this->last_query);
+                $error_str = sprintf(__('WordPress database error %1$s for query %2$s'),
+                    htmlspecialchars($str, ENT_QUOTES),
+                    htmlspecialchars($this->last_query, ENT_QUOTES));
             }
 
             error_log($error_str);
@@ -2682,7 +2694,7 @@ HTML
             }
 
             if (is_multisite()) {
-                $msg = "WordPress database error: [$str]\n{$this->last_query}\n";
+                $msg = "WordPress database error: [" . htmlspecialchars($str, ENT_QUOTES) . "]\n" . htmlspecialchars($this->last_query, ENT_QUOTES) . "\n";
                 if (defined('ERRORLOGFILE')) {
                     error_log($msg, 3, ERRORLOGFILE);
                 }
