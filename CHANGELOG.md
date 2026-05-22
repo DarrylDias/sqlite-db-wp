@@ -1,3 +1,3 @@
 # Changelog
 
-See https://github.com/aaemnnosttv/wp-sqlite-db/releases
+See https://github.com/DarrylDias/sqlite-db-wp/releases
