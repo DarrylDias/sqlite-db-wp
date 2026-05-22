@@ -1556,6 +1556,10 @@ HTML
             }
             $output .= "<div class=\"queries\" style=\"clear:both; margin_bottom:2px; border: red dotted thin;\">Queries made or created this session were<br/>\r\n\t<ol>\r\n";
             foreach ($this->queries as $q) {
+                // Truncate individual query entries to prevent memory exhaustion with large data.
+                if (strlen($q) > 2000) {
+                    $q = substr($q, 0, 2000) . '... [truncated]';
+                }
                 $output .= "\t\t<li>" . htmlspecialchars($q, ENT_QUOTES) . "</li>\r\n";
             }
             $output .= "\t</ol>\r\n</div>";
@@ -1573,6 +1577,20 @@ HTML
 
             return $output;
 
+        }
+
+        /**
+         * Method to return the last error message string.
+         *
+         * @return string
+         */
+        public function get_last_error_message()
+        {
+            if (count($this->error_messages) === 0) {
+                return '';
+            }
+
+            return end($this->error_messages);
         }
 
         /**
@@ -1816,7 +1834,9 @@ HTML
             }
 
             //long queries can really kill this
-            $pattern = '/(?<!\\\\)([\'"])(.*?)(?<!\\\\)\\1/imsx';
+            // Only match single-quoted strings. Double-quoted strings in SQLite are identifiers,
+            // not string literals. Matching double quotes breaks PHP serialized data inside values.
+            $pattern = "/(?<!\\\\)(')(.*?)(?<!\\\\)\\1/imsx";
             $_limit = $limit = ini_get('pcre.backtrack_limit');
             // if user's setting is more than default * 10, make PHP do the job.
             if ($limit > 10000000) {
@@ -2659,15 +2679,26 @@ HTML
 
             if (! $str) {
                 $err = $this->dbh->get_error_message() ? $this->dbh->get_error_message() : '';
-                if (! empty($err)) {
-                    $str = $err[2];
+                if (! empty($err) && is_string($err) && strlen($err) > 3) {
+                    $str = $err;
                 } else {
                     $str = '';
                 }
             }
+
+            // Truncate the error string to prevent memory exhaustion with large data.
+            $display_query = $this->last_query;
+            if (strlen($display_query) > 5000) {
+                $display_query = substr($display_query, 0, 5000) . '... [query truncated]';
+            }
+            $display_str = $str;
+            if (strlen($display_str) > 5000) {
+                $display_str = substr($display_str, 0, 5000) . '... [error truncated]';
+            }
+
             $EZSQL_ERROR[] = [
-                'query' => htmlspecialchars($this->last_query, ENT_QUOTES),
-                'error_str' => htmlspecialchars($str, ENT_QUOTES),
+                'query' => htmlspecialchars($display_query, ENT_QUOTES),
+                'error_str' => htmlspecialchars($display_str, ENT_QUOTES),
             ];
 
             if ($this->suppress_errors) {
@@ -2678,13 +2709,13 @@ HTML
 
             if ($caller = $this->get_caller()) {
                 $error_str = sprintf(__('WordPress database error %1$s for query %2$s made by %3$s'),
-                    htmlspecialchars($str, ENT_QUOTES),
-                    htmlspecialchars($this->last_query, ENT_QUOTES),
+                    htmlspecialchars($display_str, ENT_QUOTES),
+                    htmlspecialchars($display_query, ENT_QUOTES),
                     htmlspecialchars($caller, ENT_QUOTES));
             } else {
                 $error_str = sprintf(__('WordPress database error %1$s for query %2$s'),
-                    htmlspecialchars($str, ENT_QUOTES),
-                    htmlspecialchars($this->last_query, ENT_QUOTES));
+                    htmlspecialchars($display_str, ENT_QUOTES),
+                    htmlspecialchars($display_query, ENT_QUOTES));
             }
 
             error_log($error_str);
@@ -2694,7 +2725,7 @@ HTML
             }
 
             if (is_multisite()) {
-                $msg = "WordPress database error: [" . htmlspecialchars($str, ENT_QUOTES) . "]\n" . htmlspecialchars($this->last_query, ENT_QUOTES) . "\n";
+                $msg = "WordPress database error: [" . htmlspecialchars($display_str, ENT_QUOTES) . "]\n" . htmlspecialchars($display_query, ENT_QUOTES) . "\n";
                 if (defined('ERRORLOGFILE')) {
                     error_log($msg, 3, ERRORLOGFILE);
                 }
@@ -2702,12 +2733,12 @@ HTML
                     wp_die($msg);
                 }
             } else {
-                $str = htmlspecialchars($str, ENT_QUOTES);
-                $query = htmlspecialchars($this->last_query, ENT_QUOTES);
+                $final_str = htmlspecialchars($display_str, ENT_QUOTES);
+                $final_query = htmlspecialchars($display_query, ENT_QUOTES);
 
                 print "<div id='error'>
-			<p class='wpdberror'><strong>WordPress database error:</strong> [$str]<br />
-			<code>$query</code></p>
+			<p class='wpdberror'><strong>WordPress database error:</strong> [$final_str]<br />
+			<code>$final_query</code></p>
 			</div>";
             }
         }
@@ -2785,6 +2816,15 @@ HTML
 
             $this->last_query = $query;
 
+            // Queries against information_schema are MySQL-specific and don't exist in SQLite.
+            // Return empty results to avoid PDO errors.
+            if (stripos($query, 'information_schema') !== false) {
+                $this->last_result = [];
+                $this->num_rows = 0;
+
+                return 0;
+            }
+
             if (defined('SAVEQUERIES') && SAVEQUERIES) {
                 $this->timer_start();
             }
@@ -2800,7 +2840,11 @@ HTML
                 if (defined('WP_INSTALLING') && WP_INSTALLING) {
                     //$this->suppress_errors();
                 } else {
-                    $this->print_error($this->last_error);
+                    $error_message = $this->dbh->get_last_error_message();
+                    if (empty($error_message)) {
+                        $error_message = $this->last_error;
+                    }
+                    $this->print_error($error_message);
 
                     return false;
                 }
