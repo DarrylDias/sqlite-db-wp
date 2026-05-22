@@ -388,7 +388,7 @@ HTML
          */
         public function rand()
         {
-            return mt_rand(0, 1);
+            return mt_rand() / mt_getrandmax();
         }
 
         /**
@@ -729,7 +729,7 @@ HTML
                 return 0;
             }
             for ($i = 0; $i < $numArgs - 1; $i++) {
-                if ($searchString === strtolower($arg_list[$i])) {
+                if (strtolower($searchString) === strtolower($arg_list[$i])) {
                     return $i + 1;
                 }
             }
@@ -888,7 +888,7 @@ HTML
          */
         public function inet_aton($addr)
         {
-            return absint(ip2long($addr));
+            return sprintf('%u', ip2long($addr));
         }
 
         /**
@@ -1176,6 +1176,9 @@ HTML
                             $this->pdo = new PDO($dsn, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
                         }
                         new PDOSQLiteUDFS($this->pdo);
+                        $this->pdo->exec('PRAGMA journal_mode=WAL');
+                        $this->pdo->exec('PRAGMA busy_timeout=5000');
+                        $this->pdo->exec('PRAGMA foreign_keys=ON');
                         $GLOBALS['@pdo'] = $this->pdo;
                     } catch (PDOException $ex) {
                         $status = $ex->getCode();
@@ -1282,10 +1285,9 @@ HTML
                     umask($u);
                     $message = 'Unable to create a file in the directory! Please check your server settings.';
                     echo $message;
-
                     return false;
                 }
-                fwrite($fh, 'DENY FROM ALL');
+                fwrite($fh, "Deny from all\nRequire all denied");
                 fclose($fh);
             }
             if (! is_file(FQDBDIR . 'index.php')) {
