@@ -1,13 +1,16 @@
 {
-    "name": "aaemnnosttv/wp-sqlite-db",
-    "description": "SQLite drop-in database driver for WordPress",
+    "name": "darryldias/sqlite-db-wp",
+    "description": "Modern SQLite DB for WordPress — A secure, PHP 8.x-optimized SQLite drop-in database driver",
     "type": "wordpress-dropin",
     "license": "GPL-2.0-or-later",
     "authors": [
         {
-            "name": "Evan Mattson",
-            "email": "me@aaemnnost.tv",
+            "name": "Darryl Dias",
             "role": "Developer"
+        },
+        {
+            "name": "Evan Mattson",
+            "role": "Original Developer"
         },
         {
             "name": "Kojima Toshiyasu",
@@ -21,7 +24,7 @@
         }
     },
     "require": {
-        "php": ">=5.6",
+        "php": ">=8.0",
         "ext-PDO": "*",
         "composer/installers": "^1.0 || ^2.0"
     },
