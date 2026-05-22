@@ -8,3 +8,5 @@ tests/database.sqlite
 tests/debug.txt
 .phpunit.result.cache
 sandbox/
+*.zip
+/tmp/
