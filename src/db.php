@@ -540,12 +540,13 @@ HTML
         {
             $interval = trim(substr(trim($interval), 8));
             $parts = explode(' ', $interval);
+            $_parts = [];
             foreach ($parts as $part) {
                 if (! empty($part)) {
                     $_parts[] = $part;
                 }
             }
-            $type = strtolower(end($_parts));
+            $type = ! empty($_parts) ? strtolower(end($_parts)) : '';
             switch ($type) {
                 case "second":
                     $unit = 'S';
@@ -601,7 +602,7 @@ HTML
                     return 'P' . $days . 'D' . 'T' . $hours . 'H' . $minutes . 'M' . $seconds . 'S';
                 case "day_minute":
                     $days = intval($_parts[0]);
-                    list($hours, $minutes) = explode(':', $parts[1]);
+                    list($hours, $minutes) = explode(':', $_parts[1]);
 
                     return 'P' . $days . 'D' . 'T' . $hours . 'H' . $minutes . 'M';
                 case "day_hour":
@@ -783,7 +784,7 @@ HTML
         {
             $arg_list = func_get_args();
 
-            return "min($arg_list)";
+            return min($arg_list);
         }
 
         /**
@@ -797,7 +798,7 @@ HTML
         {
             $arg_list = func_get_args();
 
-            return "max($arg_list)";
+            return max($arg_list);
         }
 
         /**
