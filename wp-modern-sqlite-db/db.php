@@ -1959,6 +1959,7 @@ HTML
             $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
             $this->queries[] = "Rewritten:\n" . $this->rewritten_query;
             $this->extract_variables();
+            $this->add_like_escape();
             $statement = $this->prepare_query();
             $this->execute_query($statement);
         }
@@ -2007,6 +2008,7 @@ HTML
                         $this->queries[] = "Rewritten:\n" . $this->rewritten_query;
                         $this->extracted_variables = [];
                         $this->extract_variables();
+                        $this->add_like_escape();
                         if ($first) {
                             $statement = $this->prepare_query();
                             $this->execute_query($statement);
@@ -2024,6 +2026,7 @@ HTML
                 $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
                 $this->queries[] = "Rewritten:\n" . $this->rewritten_query;
                 $this->extract_variables();
+                $this->add_like_escape();
                 $statement = $this->prepare_query();
                 $this->execute_query($statement);
             }
@@ -3727,27 +3730,6 @@ HTML
          *
          * @access private
          */
-        private function rewrite_like_escape()
-        {
-            $this->_query = preg_replace_callback(
-                '/\bLIKE\s+('
-                . "(?:'[^']*(?:''[^']*)*'?'?)"  // single-quoted string
-                . '|'
-                . '(?:[^\s,;()]+)'               // unquoted token
-                . ')'
-                . '(\s+(?:AND|OR|ORDER|GROUP|HAVING|LIMIT|FOR|UNION|\)|;|$))'
-                . '/is',
-                function ($matches) {
-                    // Check if ESCAPE clause already exists
-                    if (preg_match('/\bESCAPE\s+/i', $matches[0])) {
-                        return $matches[0];
-                    }
-                    return 'LIKE ' . $matches[1] . " ESCAPE '\\'" . $matches[2];
-                },
-                $this->_query
-            );
-        }
-
         /**
          * Method to handle ORDER BY FIELD() clause.
          *
