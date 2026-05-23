@@ -1994,24 +1994,31 @@ HTML
             }
             if ($multi_insert) {
                 $first = true;
-                foreach ($exploded_parts as $value) {
-                    if (substr($value, -1, 1) === ')') {
-                        $suffix = '';
-                    } else {
-                        $suffix = ')';
+                $this->beginTransaction();
+                try {
+                    foreach ($exploded_parts as $value) {
+                        if (substr($value, -1, 1) === ')') {
+                            $suffix = '';
+                        } else {
+                            $suffix = ')';
+                        }
+                        $query_string = $query_prefix . ' ' . $value . $suffix;
+                        $this->rewritten_query = $engine->rewrite_query($query_string, $this->query_type);
+                        $this->queries[] = "Rewritten:\n" . $this->rewritten_query;
+                        $this->extracted_variables = [];
+                        $this->extract_variables();
+                        if ($first) {
+                            $statement = $this->prepare_query();
+                            $this->execute_query($statement);
+                            $first = false;
+                        } else {
+                            $this->execute_query($statement);
+                        }
                     }
-                    $query_string = $query_prefix . ' ' . $value . $suffix;
-                    $this->rewritten_query = $engine->rewrite_query($query_string, $this->query_type);
-                    $this->queries[] = "Rewritten:\n" . $this->rewritten_query;
-                    $this->extracted_variables = [];
-                    $this->extract_variables();
-                    if ($first) {
-                        $statement = $this->prepare_query();
-                        $this->execute_query($statement);
-                        $first = false;
-                    } else {
-                        $this->execute_query($statement);
-                    }
+                    $this->commit();
+                } catch (\Exception $e) {
+                    $this->rollBack();
+                    throw $e;
                 }
             } else {
                 $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
