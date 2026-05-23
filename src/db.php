@@ -3579,28 +3579,77 @@ HTML
          * @param array $unique_keys_for_cond
          * @return string
          */
-        private static function build_on_conflict_query($table_name, $insert_data, $update_data, $unique_keys_for_check, $unique_keys_for_cond)
+        private static function build_on_conflict_query($table_name, $insert_data, $update_data, $unique_keys_for_check, $unique_keys_for_cond, $unique_key_groups = array())
         {
             $conflict_cols = array();
-            foreach ($unique_keys_for_cond as $key) {
-                if (strpos($key, ',') !== false) {
-                    $parts = explode(',', $key);
-                    foreach ($parts as $part) {
-                        $conflict_cols[] = trim($part);
-                    }
-                } else {
-                    $conflict_cols[] = trim($key);
+            $update_pairs = array();
+
+            $insert_cols = array();
+            if (preg_match('/^\((.*)\)\s*VALUES\s*\((.*)\)$/ims', $insert_data, $match)) {
+                foreach (explode(',', $match[1]) as $col) {
+                    $insert_cols[] = trim($col);
+                }
+                foreach ($insert_cols as $col) {
+                    $update_pairs[] = "$col = excluded.$col";
                 }
             }
-            $conflict_cols = array_unique($conflict_cols);
 
-            $update_pairs = array();
-            if (preg_match('/^\((.*)\)\s*VALUES\s*\((.*)\)$/ims', $insert_data, $match)) {
-                $cols = explode(',', $match[1]);
-                foreach ($cols as $col) {
-                    $col_trim = trim($col);
-                    $update_pairs[] = "$col_trim = excluded.$col_trim";
+            if (! empty($unique_key_groups)) {
+                $non_primary_groups = array();
+                $primary_group = array();
+                foreach ($unique_key_groups as $key_name => $cols) {
+                    if (strtoupper($key_name) === 'PRIMARY') {
+                        $primary_group = $cols;
+                    } else {
+                        $non_primary_groups[] = $cols;
+                    }
                 }
+
+                foreach ($non_primary_groups as $cols) {
+                    $expanded = array();
+                    foreach ($cols as $col) {
+                        if (strpos($col, ',') !== false) {
+                            $expanded = array_merge($expanded, array_map('trim', explode(',', $col)));
+                        } else {
+                            $expanded[] = trim($col);
+                        }
+                    }
+                    $all_in_insert = true;
+                    foreach ($expanded as $col) {
+                        if (! in_array($col, $insert_cols)) {
+                            $all_in_insert = false;
+                            break;
+                        }
+                    }
+                    if ($all_in_insert) {
+                        $conflict_cols = $expanded;
+                        break;
+                    }
+                }
+
+                if (empty($conflict_cols) && ! empty($primary_group)) {
+                    foreach ($primary_group as $col) {
+                        if (strpos($col, ',') !== false) {
+                            $conflict_cols = array_merge($conflict_cols, array_map('trim', explode(',', $col)));
+                        } else {
+                            $conflict_cols[] = trim($col);
+                        }
+                    }
+                }
+            }
+
+            if (empty($conflict_cols)) {
+                foreach ($unique_keys_for_cond as $key) {
+                    if (strpos($key, ',') !== false) {
+                        $parts = explode(',', $key);
+                        foreach ($parts as $part) {
+                            $conflict_cols[] = trim($part);
+                        }
+                    } else {
+                        $conflict_cols[] = trim($key);
+                    }
+                }
+                $conflict_cols = array_unique($conflict_cols);
             }
 
             if (empty($conflict_cols) || empty($update_pairs)) {
@@ -3629,6 +3678,7 @@ HTML
             }
             $unique_keys_for_cond = [];
             $unique_keys_for_check = [];
+            $unique_key_groups = [];
             $pattern = '/^\\s*INSERT\\s*INTO\\s*(\\w+)?\\s*(.*)\\s*ON\\s*DUPLICATE\\s*KEY\\s*UPDATE\\s*(.*)$/ims';
             if (preg_match($pattern, $this->_query, $match_0)) {
                 $table_name = trim($match_0[1]);
@@ -3642,6 +3692,7 @@ HTML
                     foreach ($indexes as $index) {
                         if ($index->Non_unique == 0) {
                             $unique_keys_for_cond[] = $index->Column_name;
+                            $unique_key_groups[$index->Key_name][] = $index->Column_name;
                             if (strpos($index->Column_name, ',') !== false) {
                                 $unique_keys_for_check = array_merge($unique_keys_for_check,
                                     explode(',', $index->Column_name));
@@ -3660,7 +3711,7 @@ HTML
                 }
 
                 if (self::has_on_conflict_support()) {
-                    $this->_query = self::build_on_conflict_query($table_name, $insert_data, $update_data, $unique_keys_for_check, $unique_keys_for_cond);
+                    $this->_query = self::build_on_conflict_query($table_name, $insert_data, $update_data, $unique_keys_for_check, $unique_keys_for_cond, $unique_key_groups);
                     return;
                 }
 
