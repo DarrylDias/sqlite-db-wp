@@ -3224,11 +3224,11 @@ HTML
             $this->_query = str_ireplace('SQL_CALC_FOUND_ROWS', '', $this->_query);
             // we make the data for next SELECE FOUND_ROWS() statement
             $unlimited_query = preg_replace('/\\bLIMIT\\s*.*/imsx', '', $this->_query);
-            //$unlimited_query = preg_replace('/\\bGROUP\\s*BY\\s*.*/imsx', '', $unlimited_query);
-            // we no longer use SELECT COUNT query
-            //$unlimited_query = $this->_transform_to_count($unlimited_query);
+            // Use COUNT(*) subquery instead of re-executing the full query,
+            // which avoids fetching all row data just to count rows.
+            $count_query = "SELECT COUNT(*) FROM ($unlimited_query) AS _found_rows_count";
             $_wpdb = self::get_shared_db();
-            $result = $_wpdb->query($unlimited_query);
+            $result = (int) $_wpdb->get_var($count_query);
             $wpdb->dbh->found_rows_result = $result;
         }
 
