@@ -1130,6 +1130,13 @@ HTML
          */
         private $can_insert_multiple_rows = false;
         /**
+         * Whether to skip variable extraction and use direct PDO::exec().
+         * Set to true when the query is too large for PCRE regex processing.
+         *
+         * @var boolean
+         */
+        private $use_direct_exec = false;
+        /**
          *
          * @var integer
          */
@@ -1627,6 +1634,7 @@ HTML
             $this->is_error = false;
             $this->queries = [];
             $this->param_num = 0;
+            $this->use_direct_exec = false;
         }
 
         /**
@@ -1659,6 +1667,10 @@ HTML
          */
         private function prepare_query()
         {
+            if ($this->use_direct_exec) {
+                return $this->prepared_query;
+            }
+
             $this->queries[] = "Prepare:\n" . $this->prepared_query;
             $reason = 0;
             $message = '';
@@ -1695,6 +1707,27 @@ HTML
         {
             $reason = 0;
             $message = '';
+
+            if (is_string($statement)) {
+                $this->queries[] = "Executing (direct):\n" . $statement;
+                try {
+                    $this->affected_rows = $this->pdo->exec($statement);
+                    $this->last_insert_id = $this->pdo->lastInsertId();
+                    $this->return_value = $this->affected_rows;
+                } catch (PDOException $err) {
+                    $reason = $err->getCode();
+                    $message = $err->getMessage();
+                }
+                if ($reason > 0) {
+                    $err_message = sprintf("Error executing large query directly: %s", $message);
+                    $this->set_error(__LINE__, __FUNCTION__, $err_message);
+
+                    return false;
+                }
+
+                return;
+            }
+
             if (! is_object($statement)) {
                 return false;
             }
@@ -1829,6 +1862,16 @@ HTML
         {
             if ($this->query_type == 'create') {
                 $this->prepared_query = $this->rewritten_query;
+
+                return;
+            }
+
+            // For queries larger than 100KB, skip regex variable extraction and use direct execution.
+            // PCRE backtrack limits can be exceeded on very large serialized data (e.g. RSS feed transients).
+            if (strlen($this->rewritten_query) > 100000) {
+                $this->prepared_query = $this->rewritten_query;
+                $this->queries[] = "Skip variable extraction (query too large):\n" . $this->rewritten_query;
+                $this->use_direct_exec = true;
 
                 return;
             }
