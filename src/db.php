@@ -3558,12 +3558,77 @@ HTML
         }
 
         /**
+         * Check if the SQLite version supports ON CONFLICT clause (3.24.0+).
+         *
+         * @access private
+         * @return bool
+         */
+        private static function has_on_conflict_support()
+        {
+            static $supported = null;
+            if (null === $supported) {
+                if (class_exists('SQLite3')) {
+                    $version = SQLite3::version()['versionString'];
+                    $supported = version_compare($version, '3.24.0', '>=');
+                } elseif (isset($GLOBALS['@pdo'])) {
+                    $version = $GLOBALS['@pdo']->getAttribute(PDO::ATTR_SERVER_VERSION);
+                    $supported = version_compare($version, '3.24.0', '>=');
+                } else {
+                    $supported = false;
+                }
+            }
+            return $supported;
+        }
+
+        /**
+         * Build a native ON CONFLICT ... DO UPDATE SET query for SQLite >= 3.24.0.
+         *
+         * @param string $table_name
+         * @param string $insert_data
+         * @param string $update_data
+         * @param array $unique_keys_for_check
+         * @param array $unique_keys_for_cond
+         * @return string
+         */
+        private static function build_on_conflict_query($table_name, $insert_data, $update_data, $unique_keys_for_check, $unique_keys_for_cond)
+        {
+            $conflict_cols = array();
+            foreach ($unique_keys_for_cond as $key) {
+                if (strpos($key, ',') !== false) {
+                    $parts = explode(',', $key);
+                    foreach ($parts as $part) {
+                        $conflict_cols[] = trim($part);
+                    }
+                } else {
+                    $conflict_cols[] = trim($key);
+                }
+            }
+            $conflict_cols = array_unique($conflict_cols);
+
+            $update_pairs = array();
+            if (preg_match('/^\((.*)\)\s*VALUES\s*\((.*)\)$/ims', $insert_data, $match)) {
+                $cols = explode(',', $match[1]);
+                foreach ($cols as $col) {
+                    $col_trim = trim($col);
+                    $update_pairs[] = "$col_trim = excluded.$col_trim";
+                }
+            }
+
+            if (empty($conflict_cols) || empty($update_pairs)) {
+                return "INSERT INTO $table_name $insert_data";
+            }
+
+            $conflict_list = implode(', ', $conflict_cols);
+            $update_list = implode(', ', $update_pairs);
+
+            return "INSERT INTO $table_name $insert_data ON CONFLICT($conflict_list) DO UPDATE SET $update_list";
+        }
+
+        /**
          * Method to handle ON DUPLICATE KEY UPDATE statement.
          *
-         * First we use SELECT query and check if INSERT is allowed or not.
-         * Rewriting procedure looks like a detour, but I've got no other ways.
-         *
-         * Added the literal check since the version 1.5.1.
+         * For SQLite >= 3.24.0, uses native ON CONFLICT ... DO UPDATE SET syntax.
+         * For older versions, falls back to SELECT + conditional INSERT/UPDATE.
          *
          * @return void
          * @access private
@@ -3604,6 +3669,12 @@ HTML
 
                     return;
                 }
+
+                if (self::has_on_conflict_support()) {
+                    $this->_query = self::build_on_conflict_query($table_name, $insert_data, $update_data, $unique_keys_for_check, $unique_keys_for_cond);
+                    return;
+                }
+
                 // data check
                 if (preg_match('/^\((.*)\)\\s*VALUES\\s*\((.*)\)$/ims', $insert_data, $match_1)) {
                     $col_array = explode(',', $match_1[1]);
