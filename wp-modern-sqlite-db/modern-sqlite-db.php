@@ -3,7 +3,7 @@
  * Plugin Name: Modern SQLite DB for WordPress
  * Plugin URI:  https://github.com/DarrylDias/sqlite-db-wp
  * Description: A secure, PHP 8.x-optimized SQLite drop-in database driver for WordPress.
- * Version:     2.1.0
+ * Version:     2.1.1
  * Author:      Darryl Dias
  * Author URI:  https://github.com/DarrylDias
  * License:     GPL-2.0-or-later

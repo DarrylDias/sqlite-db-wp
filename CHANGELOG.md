@@ -12,6 +12,12 @@
 - **Native ON CONFLICT for SQLite 3.24+** — `INSERT ... ON DUPLICATE KEY UPDATE` now uses native `ON CONFLICT ... DO UPDATE SET` syntax, replacing the slow SELECT + conditional INSERT/UPDATE emulation. Falls back for older SQLite. (Issue #15)
 - **Simplify `ObjectArray`** — removed recursive constructor overhead; all usage sites pass flat arrays. (Issue #16)
 
+## [v2.1.1] - 2026-05-23
+
+### Bug fixes
+- **Fix ON CONFLICT target combining separate unique constraints** — grouped unique columns by `Key_name` (constraint name) and picks exactly one constraint per `ON CONFLICT` clause, preferring a non-PRIMARY unique key whose columns are all present in the INSERT. (Issue #25, PR #26)
+- **Fix `:param_n` syntax error with SQL-escaped quotes** — `extract_variables()` regex now correctly handles `''` (doubled single quotes) inside string literals, and `replace_variables_with_placeholders()` un-doubles them back to single quotes for correct parameter binding. (Issue #27)
+
 ## [Unreleased]
 
 See https://github.com/DarrylDias/sqlite-db-wp/releases

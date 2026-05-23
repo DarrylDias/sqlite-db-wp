@@ -1836,7 +1836,8 @@ HTML
             //long queries can really kill this
             // Only match single-quoted strings. Double-quoted strings in SQLite are identifiers,
             // not string literals. Matching double quotes breaks PHP serialized data inside values.
-            $pattern = "/(?<!\\\\)(')(.*?)(?<!\\\\)\\1/imsx";
+            // Handle SQL double-quote escaping ('' inside a string represents one single quote).
+            $pattern = "/(?<!\\\\)'(?:[^']|'')*'/imsx";
             $_limit = $limit = ini_get('pcre.backtrack_limit');
             // if user's setting is more than default * 10, make PHP do the job.
             if ($limit > 10000000) {
@@ -1888,6 +1889,9 @@ HTML
             if (in_array($param[0], ["'", '"'])) {
                 $param = substr($param, 1); //start
             }
+            // Un-double SQL-escaped single quotes ('' => ').
+            // WordPress doubles quotes inside string values during prepare().
+            $param = str_replace("''", "'", $param);
             //$this->extracted_variables[] = $param;
             $key = ':param_' . $this->param_num++;
             $this->extracted_variables[] = $param;
