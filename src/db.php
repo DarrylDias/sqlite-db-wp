@@ -3843,6 +3843,13 @@ HTML
         private static $shared_db = null;
 
         /**
+         * Cached index names from sqlite_master.
+         *
+         * @var array|null
+         */
+        private static $index_names_cache = null;
+
+        /**
          * Get or create the shared database instance.
          *
          * @return wpsqlitedb
@@ -4123,15 +4130,21 @@ HTML
             if (preg_match('/\(\\d+?\)/', $col_name)) {
                 $col_name = preg_replace('/\(\\d+?\)/', '', $col_name);
             }
-            $_wpdb = self::get_shared_db();
-            $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
-            if ($results) {
-                foreach ($results as $result) {
-                    if ($result->name == $index_name) {
-                        $r = rand(0, 50);
-                        $index_name = $index_name . "_$r";
-                        break;
+            if (null === self::$index_names_cache) {
+                $_wpdb = self::get_shared_db();
+                $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
+                self::$index_names_cache = array();
+                if ($results) {
+                    foreach ($results as $result) {
+                        self::$index_names_cache[] = $result->name;
                     }
+                }
+            }
+            foreach (self::$index_names_cache as $name) {
+                if ($name == $index_name) {
+                    $r = rand(0, 50);
+                    $index_name = $index_name . "_$r";
+                    break;
                 }
             }
             $index_name = str_replace(' ', '', $index_name);
@@ -4212,15 +4225,21 @@ HTML
                 $col_name = preg_replace_callback('/\([0-9]+?\)/', [$this, '_remove_length'], $col_name);
             }
             $tbl_name = $this->table_name;
-            $_wpdb = self::get_shared_db();
-            $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
-            if ($results) {
-                foreach ($results as $result) {
-                    if ($result->name == $index_name) {
-                        $r = rand(0, 50);
-                        $index_name = $index_name . "_$r";
-                        break;
+            if (null === self::$index_names_cache) {
+                $_wpdb = self::get_shared_db();
+                $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
+                self::$index_names_cache = array();
+                if ($results) {
+                    foreach ($results as $result) {
+                        self::$index_names_cache[] = $result->name;
                     }
+                }
+            }
+            foreach (self::$index_names_cache as $name) {
+                if ($name == $index_name) {
+                    $r = rand(0, 50);
+                    $index_name = $index_name . "_$r";
+                    break;
                 }
             }
             $this->index_queries[] = 'CREATE INDEX ' . $index_name . ' ON ' . $tbl_name . $col_name;
@@ -4348,6 +4367,34 @@ HTML
                 self::$shared_db = new wpsqlitedb();
             }
             return self::$shared_db;
+        }
+
+        /**
+         * Cached table schemas from sqlite_master, keyed by table name.
+         *
+         * @var array
+         */
+        private $schema_cache = array();
+
+        /**
+         * Get table schema from sqlite_master with caching.
+         *
+         * @param string $tbl_name
+         * @return array
+         */
+        private function get_table_schema($tbl_name)
+        {
+            if (!isset($this->schema_cache[$tbl_name])) {
+                $_wpdb = self::get_shared_db();
+                $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='$tbl_name'");
+                $this->schema_cache[$tbl_name] = array();
+                if ($query_obj) {
+                    foreach ($query_obj as $obj) {
+                        $this->schema_cache[$tbl_name][] = $obj->sql;
+                    }
+                }
+            }
+            return $this->schema_cache[$tbl_name];
         }
 
         /**
@@ -4618,11 +4665,7 @@ HTML
             $tokenized_query = $queries;
             $tbl_name = $tokenized_query['table_name'];
             $temp_table = 'temp_' . $tokenized_query['table_name'];
-            $_wpdb = self::get_shared_db();
-            $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='$tbl_name'");
-            for ($i = 0; $i < count($query_obj); $i++) {
-                $index_queries[$i] = $query_obj[$i]->sql;
-            }
+            $index_queries = $this->get_table_schema($tbl_name);
             $table_query = array_shift($index_queries);
             $table_query = str_replace($tokenized_query['table_name'], $temp_table, $table_query);
             $table_query = rtrim($table_query, ')');
@@ -4651,11 +4694,7 @@ HTML
         {
             $tokenized_query = $queries;
             $temp_table = 'temp_' . $tokenized_query['table_name'];
-            $_wpdb = self::get_shared_db();
-            $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            for ($i = 0; $i < count($query_obj); $i++) {
-                $index_queries[$i] = $query_obj[$i]->sql;
-            }
+            $index_queries = $this->get_table_schema($tokenized_query['table_name']);
             $table_query = array_shift($index_queries);
             $pattern1 = '/^\\s*PRIMARY\\s*KEY\\s*\(.*\)/im';
             $pattern2 = '/^\\s*.*(PRIMARY\\s*KEY\\s*(:?AUTOINCREMENT|))\\s*(?!\()/im';
@@ -4690,11 +4729,7 @@ HTML
             $tokenized_query = $queries;
             $temp_table = 'temp_' . $tokenized_query['table_name'];
             $column_def = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['column_def']);
-            $_wpdb = self::get_shared_db();
-            $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            for ($i = 0; $i < count($query_obj); $i++) {
-                $index_queries[$i] = $query_obj[$i]->sql;
-            }
+            $index_queries = $this->get_table_schema($tokenized_query['table_name']);
             $create_query = array_shift($index_queries);
             if (stripos($create_query, $tokenized_query['column_name']) === false) {
                 return 'SELECT 1=1';
@@ -4754,10 +4789,7 @@ HTML
             }
             $old_fields = rtrim($old_fields, ',');
             $new_fields = str_ireplace($tokenized_query['old_column'], $column_name, $old_fields);
-            $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            for ($i = 0; $i < count($query_obj); $i++) {
-                $index_queries[$i] = $query_obj[$i]->sql;
-            }
+            $index_queries = $this->get_table_schema($tokenized_query['table_name']);
             $create_query = array_shift($index_queries);
             $create_query = preg_replace("/{$tokenized_query['table_name']}/i", $temp_table, $create_query);
             if (preg_match("/\\b{$tokenized_query['old_column']}\\s*(.+?)(?=,)/ims", $create_query, $match)) {
@@ -4805,11 +4837,7 @@ HTML
             } else {
                 $def_value = null;
             }
-            $_wpdb = self::get_shared_db();
-            $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            for ($i = 0; $i < count($query_obj); $i++) {
-                $index_queries[$i] = $query_obj[$i]->sql;
-            }
+            $index_queries = $this->get_table_schema($tokenized_query['table_name']);
             $create_query = array_shift($index_queries);
             if (stripos($create_query, $tokenized_query['column_name']) === false) {
                 return 'SELECT 1=1';
