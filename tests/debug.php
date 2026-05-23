@@ -2,3 +2,13 @@ Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL State
 Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
 Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near ":param_3": syntax error 
 Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near ":param_1": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near ":param_3": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near ":param_3": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near "a": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near ":param_3": syntax error 
+Line 1659, Function: prepare_query, Message: Problem preparing the PDO SQL Statement.  Error was: SQLSTATE[HY000]: General error: 1 near ":param_1": syntax error 
