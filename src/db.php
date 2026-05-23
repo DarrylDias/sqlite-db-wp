@@ -2947,6 +2947,12 @@ HTML
          */
         private $num_of_rewrite_between = 0;
         /**
+         * Cached result of PRAGMA compile_options to avoid repeated queries.
+         *
+         * @var array|null
+         */
+        private static $compile_options = null;
+        /**
          * Variable to check order by field() with column data.
          *
          * @var boolean
@@ -3278,14 +3284,38 @@ HTML
          *
          * @access private
          */
+        /**
+         * Check if SQLite has ENABLE_UPDATE_DELETE_LIMIT compiled in.
+         *
+         * Results are cached in a static property to avoid repeated PRAGMA queries.
+         *
+         * @access private
+         * @return bool
+         */
+        private static function has_update_delete_limit()
+        {
+            if (null === self::$compile_options) {
+                $_wpdb = new wpsqlitedb();
+                $options = $_wpdb->get_results('PRAGMA compile_options');
+                self::$compile_options = array();
+                foreach ($options as $opt) {
+                    if (isset($opt->compile_option)) {
+                        self::$compile_options[] = $opt->compile_option;
+                    }
+                }
+            }
+            foreach (self::$compile_options as $option) {
+                if (stripos($option, 'ENABLE_UPDATE_DELETE_LIMIT') !== false) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private function rewrite_limit_usage()
         {
-            $_wpdb = new wpsqlitedb();
-            $options = $_wpdb->get_results('PRAGMA compile_options');
-            foreach ($options as $opt) {
-                if (isset($opt->compile_option) && stripos($opt->compile_option, 'ENABLE_UPDATE_DELETE_LIMIT') !== false) {
-                    return;
-                }
+            if (self::has_update_delete_limit()) {
+                return;
             }
             if (stripos($this->_query, '(select') === false) {
                 $this->_query = preg_replace('/\\s*LIMIT\\s*[0-9]$/i', '', $this->_query);
@@ -3303,12 +3333,8 @@ HTML
          */
         private function rewrite_order_by_usage()
         {
-            $_wpdb = new wpsqlitedb();
-            $options = $_wpdb->get_results('PRAGMA compile_options');
-            foreach ($options as $opt) {
-                if (isset($opt->compile_option) && stripos($opt->compile_option, 'ENABLE_UPDATE_DELETE_LIMIT') !== false) {
-                    return;
-                }
+            if (self::has_update_delete_limit()) {
+                return;
             }
             if (stripos($this->_query, '(select') === false) {
                 $this->_query = preg_replace('/\\s+ORDER\\s+BY\\s*.*$/i', '', $this->_query);
