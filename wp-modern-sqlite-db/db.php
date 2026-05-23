@@ -2947,6 +2947,25 @@ HTML
      */
     class PDOSQLiteDriver
     {
+        /**
+         * Shared database instance to avoid redundant object creation.
+         *
+         * @var wpsqlitedb|null
+         */
+        private static $shared_db = null;
+
+        /**
+         * Get or create the shared database instance.
+         *
+         * @return wpsqlitedb
+         */
+        private static function get_shared_db()
+        {
+            if (null === self::$shared_db) {
+                self::$shared_db = new wpsqlitedb();
+            }
+            return self::$shared_db;
+        }
 
         /**
          * Variable to indicate the query types.
@@ -2990,6 +3009,12 @@ HTML
          * @var integer
          */
         private $num_of_rewrite_between = 0;
+        /**
+         * Cached result of PRAGMA compile_options to avoid repeated queries.
+         *
+         * @var array|null
+         */
+        private static $compile_options = null;
         /**
          * Variable to check order by field() with column data.
          *
@@ -3202,10 +3227,9 @@ HTML
             //$unlimited_query = preg_replace('/\\bGROUP\\s*BY\\s*.*/imsx', '', $unlimited_query);
             // we no longer use SELECT COUNT query
             //$unlimited_query = $this->_transform_to_count($unlimited_query);
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $result = $_wpdb->query($unlimited_query);
             $wpdb->dbh->found_rows_result = $result;
-            $_wpdb = null;
         }
 
         /**
@@ -3322,14 +3346,38 @@ HTML
          *
          * @access private
          */
+        /**
+         * Check if SQLite has ENABLE_UPDATE_DELETE_LIMIT compiled in.
+         *
+         * Results are cached in a static property to avoid repeated PRAGMA queries.
+         *
+         * @access private
+         * @return bool
+         */
+        private static function has_update_delete_limit()
+        {
+            if (null === self::$compile_options) {
+                $_wpdb = self::get_shared_db();
+                $options = $_wpdb->get_results('PRAGMA compile_options');
+                self::$compile_options = array();
+                foreach ($options as $opt) {
+                    if (isset($opt->compile_option)) {
+                        self::$compile_options[] = $opt->compile_option;
+                    }
+                }
+            }
+            foreach (self::$compile_options as $option) {
+                if (stripos($option, 'ENABLE_UPDATE_DELETE_LIMIT') !== false) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private function rewrite_limit_usage()
         {
-            $_wpdb = new wpsqlitedb();
-            $options = $_wpdb->get_results('PRAGMA compile_options');
-            foreach ($options as $opt) {
-                if (isset($opt->compile_option) && stripos($opt->compile_option, 'ENABLE_UPDATE_DELETE_LIMIT') !== false) {
-                    return;
-                }
+            if (self::has_update_delete_limit()) {
+                return;
             }
             if (stripos($this->_query, '(select') === false) {
                 $this->_query = preg_replace('/\\s*LIMIT\\s*[0-9]$/i', '', $this->_query);
@@ -3347,12 +3395,8 @@ HTML
          */
         private function rewrite_order_by_usage()
         {
-            $_wpdb = new wpsqlitedb();
-            $options = $_wpdb->get_results('PRAGMA compile_options');
-            foreach ($options as $opt) {
-                if (isset($opt->compile_option) && stripos($opt->compile_option, 'ENABLE_UPDATE_DELETE_LIMIT') !== false) {
-                    return;
-                }
+            if (self::has_update_delete_limit()) {
+                return;
             }
             if (stripos($this->_query, '(select') === false) {
                 $this->_query = preg_replace('/\\s+ORDER\\s+BY\\s*.*$/i', '', $this->_query);
@@ -3528,7 +3572,7 @@ HTML
                 $update_data = trim($match_0[3]);
                 // prepare two unique key data for the table
                 // 1. array('col1', 'col2, col3', etc) 2. array('col1', 'col2', 'col3', etc)
-                $_wpdb = new wpsqlitedb();
+                $_wpdb = self::get_shared_db();
                 $indexes = $_wpdb->get_results("SHOW INDEX FROM {$table_name}");
                 if (! empty($indexes)) {
                     foreach ($indexes as $index) {
@@ -3547,7 +3591,6 @@ HTML
                     // Without unique key or primary key, UPDATE statement will affect all the rows!
                     $query = "INSERT INTO $table_name $insert_data";
                     $this->_query = $query;
-                    $_wpdb = null;
 
                     return;
                 }
@@ -3586,7 +3629,6 @@ HTML
                     $condition = rtrim($condition, ' OR ');
                     $test_query = "SELECT * FROM {$table_name} WHERE {$condition}";
                     $results = $_wpdb->query($test_query);
-                    $_wpdb = null;
                     if ($results == 0) {
                         $this->_query = "INSERT INTO $table_name $insert_data";
 
@@ -3729,9 +3771,8 @@ HTML
 
                 if ($tbl_name && in_array($tbl_name, $wpdb->tables)) {
                     $query = str_replace($match[0], '', $this->_query);
-                    $_wpdb = new wpsqlitedb();
+                    $_wpdb = self::get_shared_db();
                     $results = $_wpdb->get_results($query);
-                    $_wpdb = null;
                     usort($results, function ($a, $b) use ($flipped) {
                         return $flipped[$a->ID] - $flipped[$b->ID];
                     });
@@ -3762,7 +3803,7 @@ HTML
             } elseif (stripos($this->_query, $pattern2) !== false) {
                 $time = time();
                 $prep_query = "SELECT a.meta_id AS aid, b.meta_id AS bid FROM $wpdb->sitemeta AS a INNER JOIN $wpdb->sitemeta AS b ON a.meta_key='_site_transient_timeout_'||substr(b.meta_key, 17) WHERE b.meta_key='_site_transient_'||substr(a.meta_key, 25) AND a.meta_value < $time";
-                $_wpdb = new wpsqlitedb();
+                $_wpdb = self::get_shared_db();
                 $ids = $_wpdb->get_results($prep_query);
                 foreach ($ids as $id) {
                     $ids_to_delete[] = $id->aid;
@@ -3794,6 +3835,25 @@ HTML
      */
     class CreateQuery
     {
+        /**
+         * Shared database instance to avoid redundant object creation.
+         *
+         * @var wpsqlitedb|null
+         */
+        private static $shared_db = null;
+
+        /**
+         * Get or create the shared database instance.
+         *
+         * @return wpsqlitedb
+         */
+        private static function get_shared_db()
+        {
+            if (null === self::$shared_db) {
+                self::$shared_db = new wpsqlitedb();
+            }
+            return self::$shared_db;
+        }
 
         /**
          * The query string to be rewritten in this class.
@@ -4063,9 +4123,8 @@ HTML
             if (preg_match('/\(\\d+?\)/', $col_name)) {
                 $col_name = preg_replace('/\(\\d+?\)/', '', $col_name);
             }
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
-            $_wpdb = null;
             if ($results) {
                 foreach ($results as $result) {
                     if ($result->name == $index_name) {
@@ -4153,9 +4212,8 @@ HTML
                 $col_name = preg_replace_callback('/\([0-9]+?\)/', [$this, '_remove_length'], $col_name);
             }
             $tbl_name = $this->table_name;
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
-            $_wpdb = null;
             if ($results) {
                 foreach ($results as $result) {
                     if ($result->name == $index_name) {
@@ -4272,6 +4330,26 @@ HTML
 
     class AlterQuery
     {
+        /**
+         * Shared database instance to avoid redundant object creation.
+         *
+         * @var wpsqlitedb|null
+         */
+        private static $shared_db = null;
+
+        /**
+         * Get or create the shared database instance.
+         *
+         * @return wpsqlitedb
+         */
+        private static function get_shared_db()
+        {
+            if (null === self::$shared_db) {
+                self::$shared_db = new wpsqlitedb();
+            }
+            return self::$shared_db;
+        }
+
         /**
          * Variable to store the rewritten query string.
          * @var string
@@ -4540,9 +4618,8 @@ HTML
             $tokenized_query = $queries;
             $tbl_name = $tokenized_query['table_name'];
             $temp_table = 'temp_' . $tokenized_query['table_name'];
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='$tbl_name'");
-            $_wpdb = null;
             for ($i = 0; $i < count($query_obj); $i++) {
                 $index_queries[$i] = $query_obj[$i]->sql;
             }
@@ -4574,9 +4651,8 @@ HTML
         {
             $tokenized_query = $queries;
             $temp_table = 'temp_' . $tokenized_query['table_name'];
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            $_wpdb = null;
             for ($i = 0; $i < count($query_obj); $i++) {
                 $index_queries[$i] = $query_obj[$i]->sql;
             }
@@ -4614,9 +4690,8 @@ HTML
             $tokenized_query = $queries;
             $temp_table = 'temp_' . $tokenized_query['table_name'];
             $column_def = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['column_def']);
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            $_wpdb = null;
             for ($i = 0; $i < count($query_obj); $i++) {
                 $index_queries[$i] = $query_obj[$i]->sql;
             }
@@ -4666,7 +4741,7 @@ HTML
                 $column_name = $tokenized_query['old_column'];
             }
             $column_def = $this->convert_field_types($column_name, $tokenized_query['column_def']);
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $col_obj = $_wpdb->get_results("SHOW COLUMNS FROM {$tokenized_query['table_name']}");
             foreach ($col_obj as $col) {
                 if (stripos($col->Field, $tokenized_query['old_column']) !== false) {
@@ -4675,14 +4750,11 @@ HTML
                 $old_fields .= $col->Field . ',';
             }
             if ($col_check == false) {
-                $_wpdb = null;
-
                 return 'SELECT 1=1';
             }
             $old_fields = rtrim($old_fields, ',');
             $new_fields = str_ireplace($tokenized_query['old_column'], $column_name, $old_fields);
             $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            $_wpdb = null;
             for ($i = 0; $i < count($query_obj); $i++) {
                 $index_queries[$i] = $query_obj[$i]->sql;
             }
@@ -4733,9 +4805,8 @@ HTML
             } else {
                 $def_value = null;
             }
-            $_wpdb = new wpsqlitedb();
+            $_wpdb = self::get_shared_db();
             $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-            $_wpdb = null;
             for ($i = 0; $i < count($query_obj); $i++) {
                 $index_queries[$i] = $query_obj[$i]->sql;
             }
