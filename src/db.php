@@ -3149,7 +3149,7 @@ HTML
                 case 'pragma':
                     break;
                 default:
-                    if (defined(WP_DEBUG) && WP_DEBUG) {
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
                         break;
                     } else {
                         $this->return_true();

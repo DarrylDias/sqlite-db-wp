@@ -1,12 +1,1 @@
-vendor/
-composer.lock
-wordpress/
-src/uploads/
-tests/.htaccess
-tests/index.php
-tests/database.sqlite
-tests/debug.txt
-.phpunit.result.cache
-sandbox/
-*.zip
-/tmp/
+Nothing needs to be added to .gitignore since only a PHP source file was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
